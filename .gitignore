@@ -1,0 +1,15 @@
+# Bytecode and caches
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv*/
+.venv/
+
+# Output folders
+results/
+visuals/
+structured_output/
+
+# Sample or test PDFs
+input/*.pdf

@@ -1,0 +1,80 @@
+import requests
+import json
+import base64
+import os
+
+MODEL_URL = "http://localhost:11434/api/generate"
+MODEL_NAME = "llama3.2-vision"
+
+prompt_template = """
+You are an expert document analyst. Your task is to extract structured information from a PDF page. The goal is to support accessibility tagging.
+
+Here is the OCR text content of the current page:
+```
+{text}
+```
+
+Here is a rendered image of the same page. Use this image to supplement the text in detecting figures, images, tables, or layout details.
+
+Return a JSON object with the following schema:
+
+{
+  "article_title": "..." or null,
+  "author": "..." or null,
+  "starts_new_section": true or false,
+  "continues_previous_section": true or false,
+  "citation_numbers": [1, 2, 3] (only if explicitly marked citations like [1], [2], etc.—DO NOT include years like 1990 or inline references like (2007)),
+  "footnotes": [
+    {
+      "marker": "*",  # or a number or other symbol
+      "text": "Full footnote text here"
+    }
+  ],
+  "images": [
+    {
+      "type": "image" or "chart" or "table",
+      "description": "Concise alt text for this visual element",
+      "coordinates": { "x0": ..., "y0": ..., "x1": ..., "y1": ... }
+    }
+  ],
+  "notes": "Any extra notes or layout observations that could help structure the PDF"
+}
+
+Only extract the 'article_title' and 'author' if this is the first page of the article (page 1). On later pages, set them to null.
+
+Do not hallucinate data. If no citations, images, or footnotes are found, use empty arrays.
+
+Focus especially on accurately identifying images and tables with good alt text and on NOT misidentifying years as citations.
+"""
+
+def get_structured_summary(text, image_path):
+    with open(image_path, "rb") as img_file:
+        image_bytes = img_file.read()
+
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": prompt_template.replace("{text}", text),
+        "images": [base64.b64encode(image_bytes).decode("utf-8")],
+        "stream": False
+    }
+
+    response = requests.post(MODEL_URL, json=payload)
+    if response.status_code != 200:
+        raise Exception(f"Model API error: {response.status_code} {response.text}")
+
+    try:
+        result = response.json()
+    except Exception as e:
+        raise Exception(f"Failed to parse JSON from model response: {e}\nRaw response: {response.text}")
+
+    # Return logic
+    if isinstance(result, dict) and "message" in result:
+        return result["message"]
+    elif isinstance(result, str):
+        return result
+    elif isinstance(result, dict):
+        return json.dumps(result, indent=2)  # Fallback for unwrapped JSON
+    else:
+        raise Exception(f"Unexpected response format: {type(result)}\nContent: {result}")
+
+

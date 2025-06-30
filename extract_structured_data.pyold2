@@ -1,0 +1,42 @@
+import os
+import sys
+import json
+import fitz  # PyMuPDF
+from ai_interface import get_structured_summary
+
+if len(sys.argv) != 2:
+    print("Usage: python extract_structured_data.py input.pdf")
+    sys.exit(1)
+
+input_pdf = sys.argv[1]
+doc = fitz.open(input_pdf)
+
+output_dir = "structured_output"
+render_dir = "rendered_pages"
+os.makedirs(output_dir, exist_ok=True)
+os.makedirs(render_dir, exist_ok=True)
+
+for page_number in range(len(doc)):
+    page = doc[page_number]
+    text = page.get_text()
+
+    # Render the page as an image
+    pix = page.get_pixmap(dpi=200)
+    image_path = os.path.join(render_dir, f"page_{page_number+1:03}.png")
+    pix.save(image_path)
+
+    print(f"\n🧾 Processing Page {page_number + 1}/{len(doc)}")
+
+    # Pass both text and image to the vision model
+    structured_data = get_structured_summary(text, image_path)
+
+    print(f"📄 LLaMA Output for Page {page_number + 1} :\n {structured_data}\n")
+
+    # Save the structured data to a JSON file
+    output_file = os.path.join(output_dir, f"page_{page_number+1:03}.json")
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(structured_data)
+        print(f"💾 Saved structured output to: {output_file}")
+
+doc.close()
+print("✅ Structured data extracted and saved to structured_output")

@@ -1,0 +1,85 @@
+# tagger.py
+import fitz  # PyMuPDF
+import os
+import re
+import logging
+from pathlib import Path
+
+logging.basicConfig(level=logging.INFO)
+
+def tag_pdf_structure(input_path: str, output_path: str) -> None:
+    logging.info(f"📄 Opening PDF for tagging: {input_path}")
+    doc = fitz.open(input_path)
+
+    footnote_refs = {}
+    footnote_texts = {}
+
+    for page_num, page in enumerate(doc):
+        blocks = page.get_text("dict")["blocks"]
+
+        for b in blocks:
+            if "lines" not in b:
+                continue
+            text = "\n".join([" ".join([span["text"] for span in line["spans"]]) for line in b["lines"]])
+            text = text.strip()
+            if not text:
+                continue
+
+            # Position
+            rect = fitz.Rect(b["bbox"])
+            rect.y1 = rect.y0 + 12
+
+            # Tag title on first page
+            if page_num == 0 and len(text.split()) > 3 and b.get("bbox", [])[3] < page.rect.height / 4:
+                page.insert_textbox(rect, "", overlay=True)  # empty overlay
+                page.insert_text(rect.tl, f"[TAG: H1] {text}", fontsize=6)
+                logging.info(f"🏷️ Title tagged: {text}")
+                continue
+
+            # Font size average
+            font_sizes = [span["size"] for line in b["lines"] for span in line["spans"]]
+            avg_font_size = sum(font_sizes) / len(font_sizes)
+
+            if avg_font_size > 14:
+                tag = "H2"
+            else:
+                tag = "P"
+
+            # Footnote reference detection
+            footnote_ref_match = re.findall(r"(?:\s|\[)(\d{1,2})(?:\]|\s|$)", text)
+            if footnote_ref_match:
+                for ref in footnote_ref_match:
+                    footnote_refs[ref] = f"ref_{ref}"
+                    text = text.replace(ref, f"[Reference {ref}]")
+
+            page.insert_textbox(rect, "", overlay=True)
+            page.insert_text(rect.tl, f"[TAG: {tag}] {text}", fontsize=6)
+
+    # Extract footnotes
+    last_page = doc[-1]
+    for b in last_page.get_text("dict")["blocks"]:
+        if "lines" not in b:
+            continue
+        text = "\n".join([" ".join([span["text"] for span in line["spans"]]) for line in b["lines"]]).strip()
+        match = re.match(r"^(\d{1,2})\.\s+(.+)", text)
+        if match:
+            number, content = match.groups()
+            footnote_texts[number] = content
+            logging.info(f"📌 Footnote found: {number}. {content}")
+
+    # Add annotations to link references to footnotes
+    for ref, ref_id in footnote_refs.items():
+        if ref in footnote_texts:
+            last_page.add_note_annot(
+                rect=fitz.Rect(72, 72 + int(ref) * 14, 300, 100 + int(ref) * 14),
+                text=footnote_texts[ref]
+            )
+            logging.info(f"🔗 Linked footnote {ref} to annotation.")
+
+    doc.save(output_path)
+    logging.info(f"✅ Structured PDF saved to: {output_path}")
+
+
+# Test run
+if __name__ == "__main__":
+    tag_pdf_structure("sample.pdf", "sample_structured.pdf")

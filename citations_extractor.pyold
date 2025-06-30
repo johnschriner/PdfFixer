@@ -1,0 +1,38 @@
+import os
+import sys
+import json
+
+STRUCTURED_DIR = "structured_output"
+
+def extract_text_and_references(pdf_filename):
+    print(f"📌 Extracting citations and footnotes for: {pdf_filename}")
+    for page_num in range(100):  # Cap at 100 pages to avoid infinite loops
+        json_path = os.path.join(STRUCTURED_DIR, f"page_{page_num+1:03}.json")
+        if not os.path.exists(json_path):
+            break
+
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                print(f"🔍 Attempting to read {json_path}")
+                raw = f.read().strip()
+                if not raw:
+                    print(f"⚠️  [Page {page_num+1}] Skipping empty file.")
+                    continue
+                data = json.loads(raw)
+        except Exception as e:
+            print(f"❌  [Page {page_num+1}] Error reading JSON: {e}")
+            continue
+
+        print(f"[Page {page_num+1}] Summary:")
+        for key in ["article_title", "author", "citation_numbers", "footnotes", "images"]:
+            value = data.get(key, "Not found")
+            print(f"  • {key}: {value}")
+        print()
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python3 citations_extractor.py <pdf_filename>")
+        sys.exit(1)
+
+    pdf_path = sys.argv[1]
+    extract_text_and_references(pdf_path)

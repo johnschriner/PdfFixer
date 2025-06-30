@@ -1,0 +1,120 @@
+import sys
+import json
+import os
+from pikepdf import Pdf, Name, Dictionary, Array
+from difflib import SequenceMatcher
+import fitz  # PyMuPDF
+import pikepdf
+
+def similar(a, b):
+    return SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
+def extract_pdf_metadata(filepath):
+    doc = fitz.open(filepath)
+    metadata = doc.metadata
+    doc.close()
+    return metadata.get("title", ""), metadata.get("author", "")
+
+def should_update_metadata(old, new, threshold=0.9):
+    if not old:
+        return True
+    return similar(old, new) < threshold
+
+if len(sys.argv) != 3:
+    print("Usage: python add_structure.py input.pdf output.pdf")
+    sys.exit(1)
+
+input_pdf = sys.argv[1]
+output_pdf = sys.argv[2]
+
+# Step 1: Gather structured elements
+structured_dir = "structured_output"
+json_files = sorted(
+    [f for f in os.listdir(structured_dir) if f.endswith(".json")],
+    key=lambda x: int(x.split("_")[1].split(".")[0])
+)
+
+kids = []
+
+for f in json_files:
+    with open(os.path.join(structured_dir, f), "r", encoding="utf-8") as jf:
+        data = json.load(jf)
+        for block in data.get("content", []):
+            tag = block.get("tag")
+
+
+for f in json_files:
+    with open(os.path.join(structured_dir, f), "r", encoding="utf-8") as jf:
+        data = json.load(jf)
+        for block in data.get("content", []):
+            tag = block.get("tag")
+            mcid = block.get("mcid")
+            if mcid is not None:
+                struct_elem = Dictionary({
+                    "/Type": Name("/StructElem"),
+                    "/S": Name(f"/{tag}"),
+                    "/K": mcid
+                })
+                if tag in ["Figure", "Chart"]:
+                    alt = block.get("alt", "").strip()
+                    if alt:
+                        struct_elem[Name("/Alt")] = alt
+                kids.append(struct_elem)
+
+# Step 2: Build RoleMap dictionary (plain / keys)
+rolemap = Dictionary({
+    "/H1": Name("/H"),
+    "/H2": Name("/H"),
+    "/P": Name("/P"),
+    "/Reference": Name("/Reference"),
+    "/Figure": Name("/Figure"),
+    "/Chart": Name("/Figure")  # Treated as figures by screen readers
+})
+
+
+# Step 3: Open and modify the PDF root
+with Pdf.open(input_pdf) as pdf:
+    root = pdf.Root
+
+    # Extract original metadata and compare with AI values
+    original_title, original_author = extract_pdf_metadata(input_pdf)
+
+    # Set your AI-detected values here (could be parsed from page_001.json)
+    ai_title = "Charles O. Gregory: An Appreciation from the Wings"
+    ai_author = "Richard Epstein"
+
+    # Decide whether to overwrite
+    final_title = ai_title if should_update_metadata(original_title, ai_title) else original_title
+    final_author = ai_author if should_update_metadata(original_author, ai_author) else original_author
+
+    # Log metadata decision
+    print(f"📄 Metadata Decision:")
+    print(f"  Original Title: {original_title}")
+    print(f"  AI Title:       {ai_title}")
+    print(f"  ➤ Using Title:  {final_title}")
+    print(f"  Original Author: {original_author}")
+    print(f"  AI Author:       {ai_author}")
+    print(f"  ➤ Using Author:  {final_author}")
+
+    # Set the metadata in the PDF
+    pdf.docinfo.update({
+        pikepdf.Name("/Title"): final_title,
+        pikepdf.Name("/Author"): final_author
+    })
+
+    # Safe MarkInfo dict
+    root["/MarkInfo"] = Dictionary({
+        "/Marked": True
+    })
+
+    # StructTreeRoot
+    root["/StructTreeRoot"] = Dictionary({
+        "/Type": Name("/StructTreeRoot"),
+        "/K": Array(kids),
+        "/RoleMap": rolemap,
+        "/ParentTreeNextKey": 1  # optional
+    })
+
+    pdf.save(output_pdf)
+
+print(f"✅ PDF structural metadata added and saved to: {output_pdf}")

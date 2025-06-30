@@ -1,0 +1,89 @@
+import requests
+import json
+import os
+
+MODEL_URL = "http://localhost:11434/api/generate"
+MODEL_NAME = "llama3.2-vision"
+
+prompt_template = """
+You are a strict document accessibility analyst. Use BOTH the OCR text and image of the page to extract a complete accessibility-aware structure.
+
+OCR text:
+```
+{text}
+```
+
+Respond ONLY with valid JSON using the schema below. Do not include any markdown or explanation.
+
+Schema:
+{
+  "article_title": "..." or null,  // ONLY on page 1
+  "author": "..." or null,         // ONLY on page 1
+  "starts_new_section": true or false,
+  "heading_level": "H2" or "H3" or null,  // NEVER use H1 except for page 1
+  "continues_previous_section": true or false,
+  "citation_numbers": [1, 2, 3],  // ONLY explicit in-text markers like [1], [2], or superscripts. NEVER include years.
+  "footnotes": [
+    {
+      "marker": "*",  // or [1], 1, †, etc.
+      "text": "Full footnote text"
+    }
+  ],
+  "images": [
+    {
+      "type": "image" or "chart" or "table",
+      "description": "Alt-text describing the image's function or content",
+      "coordinates": { "x0": ..., "y0": ..., "x1": ..., "y1": ... },
+      "caption": "Optional caption text near the image"
+    }
+  ],
+  "suggested_tags": ["multi-column", "footnote", "table", "image", "list", "heading", etc],
+  "notes": "Layout structure, oddities, or relationships across pages"
+}
+
+Rules:
+- Page 1 ONLY: fill out "article_title" and "author". On later pages, these MUST be null.
+- NEVER repeat heading_level H1 after page 1. Use H2 or H3 for sections.
+- Mark starts_new_section and heading_level if a clear new section starts.
+- Otherwise use continues_previous_section = true.
+- Citations MUST be real references like [1], [2], * — NOT years (e.g. 1996), names, or parentheticals.
+- Footnotes appear at the BOTTOM of the page and correspond to in-text markers.
+- Always identify visible images, tables, or charts. Include coordinates and alt-text.
+- NEVER output markdown. Only return valid JSON.
+"""
+
+def get_structured_summary(text, image_path):
+    with open(image_path, "rb") as img_file:
+        image_bytes = list(img_file.read())
+
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": prompt_template.replace("{text}", text),
+        "images": [image_bytes],
+        "stream": False
+    }
+
+    response = requests.post(MODEL_URL, json=payload)
+    if response.status_code != 200:
+        raise Exception(f"Model API error: {response.status_code} {response.text}")
+
+    result = response.json()
+    print("🔁 Raw model response:", result)
+
+    if "message" in result:
+        content = result["message"]
+    elif "response" in result:
+        content = result["response"]
+    elif isinstance(result, str):
+        content = result
+    else:
+        raise Exception("Unexpected response format from model API")
+
+    # Strip markdown if present
+    content = content.strip()
+    if content.startswith("```json"):
+        content = content[7:].strip()
+    if content.endswith("```"):
+        content = content[:-3].strip()
+
+    return content

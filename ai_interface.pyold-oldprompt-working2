@@ -1,0 +1,84 @@
+
+import requests
+import json
+import base64
+import os
+
+MODEL_URL = "http://localhost:11434/api/generate"
+MODEL_NAME = "llama3.2-vision"
+
+prompt_template = """
+You are an expert document analyst helping to make PDFs accessible. Analyze each page using both the OCR text and the rendered image to extract structured, accessibility-relevant information.
+
+OCR text content:
+```
+{text}
+```
+
+Use this information to return a JSON object with the following schema:
+
+{
+  "article_title": "..." or null,  // ONLY on page 1. Use null otherwise.
+  "author": "..." or null,         // ONLY on page 1. Use null otherwise.
+  "starts_new_section": true or false,
+  "heading_level": "H2" or "H3" or null, // If starts_new_section is true, suggest the appropriate level.
+  "continues_previous_section": true or false, // Use this if the content is clearly part of a section from a previous page.
+  "citation_numbers": [1, 2, 3], // Must be explicitly numbered citations like [1], [2], or superscript numbers.
+                                // DO NOT include years (e.g., 2007) or inline references like (1995) or "Smith 2001".
+  "footnotes": [
+    {
+      "marker": "*",            // or a number or other symbol
+      "text": "Full footnote text here"
+    }
+  ],
+  "images": [
+    {
+      "type": "image" or "chart" or "table",
+      "description": "Concise and meaningful alt text describing the visual element's function or content",
+      "coordinates": { "x0": ..., "y0": ..., "x1": ..., "y1": ... }
+    }
+  ],
+  "notes": "Any layout observations or elements like column structure, multi-part figures, or continued headings"
+}
+
+Guidelines:
+- Only fill `article_title` and `author` if this is page 1. Use `null` on later pages.
+- A section may span multiple pages. If the heading clearly continues from a previous page, set `continues_previous_section: true`.
+- If a new heading starts on this page, set `starts_new_section: true` and assign a `heading_level`.
+- Use empty arrays for citations, footnotes, or images if none exist.
+- Be precise and factual. Do NOT hallucinate or fabricate information.
+- Prefer layout-informed decisions: use the image to help detect charts/tables and verify structure.
+
+Focus on supporting accessible PDF tagging. Your output should make it easy to convert the content into structured headings, alt text, and linked footnotes.
+
+Respond ONLY with valid JSON conforming to the schema above. No explanations.
+"""
+
+def get_structured_summary(text, image_path):
+    with open(image_path, "rb") as img_file:
+        image_bytes = img_file.read()
+
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": prompt_template.replace("{text}", text),
+        "images": [base64.b64encode(image_bytes).decode("utf-8")],
+        "stream": False
+    }
+
+    response = requests.post(MODEL_URL, json=payload)
+    if response.status_code != 200:
+        raise Exception(f"Model API error: {response.status_code} {response.text}")
+
+    try:
+        result = response.json()
+    except Exception as e:
+        raise Exception(f"Failed to parse JSON from model response: {e}\nRaw response: {response.text}")
+
+    if isinstance(result, dict) and "message" in result:
+        return result["message"]
+    elif isinstance(result, str):
+        return result
+    elif isinstance(result, dict):
+        return json.dumps(result, indent=2)
+    else:
+        raise Exception(f"Unexpected response format: {type(result)}\nContent: {result}")

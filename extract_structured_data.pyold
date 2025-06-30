@@ -1,0 +1,31 @@
+import fitz  # PyMuPDF
+import os
+import json
+import sys
+from ai_interface import get_structured_summary  # Assuming this handles LLaMA prompt/response
+
+INPUT_PDF = sys.argv[1]
+BASENAME = os.path.splitext(os.path.basename(INPUT_PDF))[0]
+STRUCTURED_DIR = "structured_output"
+os.makedirs(STRUCTURED_DIR, exist_ok=True)
+
+pdf = fitz.open(INPUT_PDF)
+total_pages = len(pdf)
+
+for page_num in range(total_pages):
+    print(f"\n🧾 Processing Page {page_num + 1}/{total_pages}")
+    page = pdf.load_page(page_num)
+    text = page.get_text()
+    
+    if not text.strip():
+        print("⚠️ Page is empty. Skipping.")
+        continue
+
+    llama_output = get_structured_summary(text)
+    print("📄 LLaMA Output for Page", page_num + 1, ":\n", llama_output)
+
+    # Save the AI summary
+    output_path = os.path.join(STRUCTURED_DIR, f"page_{page_num + 1:03}.json")
+    with open(output_path, "w") as f:
+        json.dump({"page": page_num + 1, "text": text, "summary": llama_output}, f, indent=2)
+        print(f"💾 Saved structured output to: {output_path}")

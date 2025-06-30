@@ -1,0 +1,7 @@
+borb
+Flask
+PyPDF2
+PyMuPDF==1.22.3
+requests
+tqdm
+pikepdf

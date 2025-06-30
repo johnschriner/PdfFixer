@@ -1,0 +1,77 @@
+import base64
+import requests
+import json
+
+MODEL_NAME = "llama3.2-vision"
+OLLAMA_URL = "http://localhost:11434/api/generate"
+
+FULL_PROMPT_INSTRUCTIONS = """
+You are an AI assistant that extracts structured information from PDF pages.
+Your task is to return a single well-formatted JSON object with the following fields:
+
+- article_title (str or null): the article title, if it appears on this page. Only include it on page 1.
+- author (str or null): the author's name, if present. Only include it on page 1.
+- headings (list): structured section headings found on the page, with nesting if possible.
+- figures (list): any images on the page, with a short alt-text style description.
+- tables (list): any tables, as Markdown strings and brief descriptions.
+- lists (list): any numbered or bulleted lists, each as an array of items.
+- citations (list): in-text citation markers like [1], [2], *, † etc.
+- footnotes (list): any visible footnote content on the page that matches citation markers.
+- suggested_tags (list): 3–5 tags or keywords summarizing the content of this page.
+- start_new_section (bool): true if this page appears to start a new major section.
+- notes (str): any special notes, warnings, or formatting comments.
+
+Rules:
+- If this is not page 1, leave article_title and author as null.
+- Do NOT include more than one JSON object.
+- Do NOT include commentary outside the JSON object.
+- Escape all characters properly.
+
+Return only a single JSON object like the example below.
+
+Example:
+{
+  "article_title": "Marxism and Language",
+  "author": "Jane Doe",
+  "headings": [{"heading": "Introduction"}, {"heading": "Historical Background"}],
+  "figures": [{"description": "Photograph of Nikolai Marr"}],
+  "tables": [{"description": "Linguistic categories", "markdown": "| Category | Description |\n|---|---|"}],
+  "lists": [["Item 1", "Item 2"]],
+  "citations": ["[1]", "[2]", "*"],
+  "footnotes": [{"marker": "*", "text": "This is a footnote."}],
+  "suggested_tags": ["linguistics", "Marxism", "Soviet Union"],
+  "start_new_section": true,
+  "notes": "Page contains images and complex footnotes."
+}
+"""
+
+def get_structured_summary(text, image_path):
+    with open(image_path, "rb") as img_file:
+        image_bytes = img_file.read()
+
+    prompt_template = FULL_PROMPT_INSTRUCTIONS + "\n\nHere is the page content:\n{text}"
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": prompt_template.replace("{text}", text),
+        "images": [base64.b64encode(image_bytes).decode("utf-8")],
+        "stream": False,
+        "num_predict": 4096  # NEW: limits output length
+    }
+
+    print("🔁 Sending request for page 1...")
+    response = requests.post(OLLAMA_URL, json=payload)
+    if response.status_code != 200:
+        raise Exception(f"Ollama API error: {response.status_code} {response.text}")
+
+    content = response.text.strip()
+
+    try:
+        # Attempt to isolate valid JSON block (even if wrapped in markdown)
+        json_start = content.find('{')
+        json_end = content.rfind('}') + 1
+        if json_start == -1 or json_end == -1:
+            raise Exception("No JSON object found in response.")
+        json_str = content[json_start:json_end]
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        raise Exception("Unexpected response format from model API:\n" + content)
