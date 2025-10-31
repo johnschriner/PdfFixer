@@ -1,7 +1,13 @@
+# Flask and web server components
 flask
-requests
+flask-cors
+flask-socketio
+gevent
+gevent-websocket
+
+# PDF processing
 PyMuPDF
 pikepdf
-rich
 
-gevent
+# AI/API communication
+requests
