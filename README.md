@@ -7,8 +7,8 @@ This project is a Flask-based web application designed to process and enhance PD
 
 * **Title & Author Extraction:** Analyzes the first page (text and image) to suggest a title and author, especially when metadata is missing or generic.
 * **Metadata Embedding:** Writes the corrected title, author, and subject keywords directly into the PDF's metadata.
-* **Alt Text Generation:** Scans the PDF for images and uses a vision-capable AI model to generate descriptive alt text for accessibility.
-* **Footnote/Citation Extraction:** Identifies and extracts footnotes and citations from the document text.
+* **Alt Text Generation:** Optionally scans the PDF for significant images and uses a vision-capable AI model to generate descriptive alt text for accessibility.
+
 
 The application uses Flask-SocketIO and gevent for real-time progress updates to the user in the browser.
 
