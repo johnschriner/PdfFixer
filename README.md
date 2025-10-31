@@ -1,7 +1,7 @@
 # AI PDF Processing WebApp
 
 * Demo:
-<iframe src="https://player.vimeo.com/1130958514" width="640" height="360" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
+[![Watch the video demo](./screen-demo.png)](https://vimeo.com/1130958514)
 
 This project is a Flask-based web application designed to process and enhance PDF documents using AI. It provides a web interface (served via `app.py`) where users can upload PDF files. The backend then uses a local Ollama instance to perform several enhancement tasks:
 
