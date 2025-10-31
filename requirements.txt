@@ -1,0 +1,7 @@
+flask
+requests
+PyMuPDF
+pikepdf
+rich
+
+gevent
