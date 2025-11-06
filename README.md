@@ -89,3 +89,36 @@ Follow these steps to run the application, as you described:
     * **If not using ngrok:** Open `http://localhost:5000` in your browser.
 
 You can now use the web interface to upload and process your PDF files.
+<p>
+<p>
+<p>
+    
+## strip_and_clean.py — brief description
+
+This script is run on all PDF's after processing with the app.  This way, exiftool and pdfinfo will read the correct and sole metadata for author, title, and keywords.
+- Opens a PDF (or a folder of PDFs) and **cleans document metadata**.
+
+- **Reads** existing `/Title`, `/Author`, and `/Keywords` (skips `/Subject`).
+
+- **Removes** embedded XMP and **clears** all Info dictionary keys.
+
+- **Writes back only**: Title, Author, and Keywords (leaves `/Creator` empty).
+
+- **Rebuilds XMP** with:
+  - `dc:title` (x-default)
+  - `dc:creator` (sequence with the single author)
+  - `pdf:Keywords`
+  - fresh UTC `xmp:CreateDate` and `xmp:ModifyDate`
+
+- Saves **in place** (`--inplace`) or to an **output directory**; supports directory inputs via `--glob` and quieter logs with `--quiet`.
+
+Usage
+-----
+
+```bash
+# Clean one file in place
+python3 strip_and_clean.py file.pdf --inplace
+
+# Clean all PDFs in a folder into ./out/
+python3 strip_and_clean.py /path/to/folder ./out --glob "*.pdf"
+```
