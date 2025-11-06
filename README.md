@@ -93,7 +93,7 @@ You can now use the web interface to upload and process your PDF files.
 <p>
 <p>
     
-## strip_and_clean.py — brief description
+## strip_and_clean.py
 
 This script is run on all PDF's after processing with the app.  This way, exiftool and pdfinfo will read the correct and sole metadata for author, title, and keywords.
 - Opens a PDF (or a folder of PDFs) and **cleans document metadata**.
